@@ -22,12 +22,14 @@ fast.cov <- function(x, y) {
     n.obs <- crossprod(!is.na(x), !is.na(y))
     ret <- crossprod(replace(x, is.na(x), 0),
                      replace(y, is.na(y), 0)) / n.obs
+    return(ret)
 }
 
 fast.z.cov <- function(x, y) {
     n.obs <- crossprod(!is.na(x), !is.na(y))
     ret <- crossprod(replace(x, is.na(x), 0),
                      replace(y, is.na(y), 0)) / sqrt(n.obs)
+    return(ret)
 }
 
 get.marginal.qtl <- function(xx, yy) {
@@ -40,9 +42,9 @@ get.marginal.qtl <- function(xx, yy) {
     beta <- fast.cov(.xx, .yy) %>% as.matrix() %>% melt()
     beta.z <- fast.z.cov(.xx, .yy) %>% as.matrix() %>% melt()
 
-    colnames(beta) <- c('rs', 'cg', 'beta')
-    colnames(beta.z) <- c('rs', 'cg', 'beta.z')
-    out <- beta %>% left_join(beta.z, by = c('rs', 'cg')) %>%
+    colnames(beta) <- c('snp', 'gene', 'beta')
+    colnames(beta.z) <- c('snp', 'gene', 'beta.z')
+    out <- beta %>% left_join(beta.z, by = c('snp', 'gene')) %>%
         as.data.frame()
     return(out)
 }
@@ -50,8 +52,9 @@ get.marginal.qtl <- function(xx, yy) {
 fast.cor <- function(x, y) {
     x.sd <- apply(x, 2, sd, na.rm = TRUE)
     y.sd <- apply(y, 2, sd, na.rm = TRUE)
-    ret <- fast.cov(x, y)
+    ret <- fast.cov(scale(x, scale = FALSE), scale(y, scale = FALSE))
     ret <- sweep(sweep(ret, 1, x.sd, `/`), 2, y.sd, `/`)    
+    return(ret)
 }
 
 write.tab <- function(x, ...) {
@@ -61,4 +64,31 @@ write.tab <- function(x, ...) {
 
 write.mat <- function(x, digits = 4, ...) {
     write.tab(round(x, digits), ...)
+}
+
+take.theta <- function(qtl.out) {
+    if('mean.left' %in% names(qtl.out)){
+        theta <- qtl.out$mean.left$theta %*% t(qtl.out$mean.right$theta)
+    } else {
+        theta <- qtl.out$mean$theta
+    }
+    return(theta)
+}
+
+take.pve <- function(qtl.out, xx, cc) {
+
+    theta <- take.theta(qtl.out)
+    theta.cov <- qtl.out$mean.cov$theta
+    resid <- qtl.out$resid$theta
+
+    xx[is.na(xx)] <- 0
+    theta[is.na(theta)] <- 0
+    theta.cov[is.na(theta.cov)] <- 0
+    cc[is.na(cc)] <- 0
+    eta.1 <- xx %*% theta
+    eta.2 <- cc %*% theta.cov
+
+    data.frame(v1 = apply(eta.1, 2, var, na.rm = TRUE),
+               v2 = apply(eta.2, 2, var, na.rm = TRUE),
+               vr = apply(resid, 2, var, na.rm = TRUE))
 }

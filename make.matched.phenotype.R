@@ -16,8 +16,10 @@ sample.tab <- read.table(sample.file, sep = '\t',
                          col.names = c('sample.id', 'data.col', 'projid', 'RIN'))
 
 pheno.out <- sample.tab %>% left_join(pheno.tab, by = 'projid') %>%
-    select(data.col, projid, np_sqrt, nft_sqrt, age_death, msex, educ) %>%
-        na.omit()
+    select(data.col, projid, amyloid_sqrt, tangles_sqrt, cogn_ep_random_slope, age_death, studyn, msex, educ) %>%
+        filter(!is.na(amyloid_sqrt)) %>%
+            group_by(projid) %>%
+                filter(row_number() == 1)
 
 write.table(pheno.out, file = gzfile(out.file), sep = '\t', row.names = FALSE,
             col.names = TRUE, quote = FALSE)
