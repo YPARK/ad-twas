@@ -84,6 +84,7 @@ $(TEMPDIR):
 
 
 ################################################################
+## confounder correction and marginal QTL
 step4: $(TEMPDIR) jobs/qtl-run-jobs.txt.gz
 
 jobs/qtl-run-jobs.txt.gz: $(foreach chr, $(CHR), jobs/temp-qtl-run-$(chr)-jobs.txt.gz)
@@ -104,6 +105,7 @@ jobs/qtl-run-jobs-long.txt.gz:
 
 
 ################################################################
+## polygenic QTL
 step5: jobs/poly-jobs.txt.gz
 
 step5-resubmit: jobs/poly-jobs-resubmit.txt.gz
@@ -132,7 +134,22 @@ jobs/temp_poly-%-jobs.txt: result/qtl/%.resid.gz
 	@for rseed in $(RSEED); do [ -f result/poly/perm.$${rseed}/$*.effect.gz ] || echo ./make.polygenic.R $< $(TEMPDIR)/$(shell echo $* | awk -F'/' '{ print $$1 }')/data-$(shell basename $* | awk -F'-' '{ gsub(/b/, "", $$1); print $$1 }') result/poly/perm.$${rseed}/$* $${rseed} >> $@; done
 
 
+################################################################
+## null distribution and final list of poygenic models
+QTL_DATA := hs-fqtl hs-sqtl peer-sqtl hs-lm peer-lm
 
+step6: $(foreach qtl_data, $(QTL_DATA), result/stat/$(qtl_data)-max-effect.gz result/null/$(qtl_data)-max-effect.gz result/stat/$(qtl_data)-qval.gz)
+
+result/stat/%-max-effect.gz:
+	[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	zcat result/poly/*/*-$*.max-effect.gz | awk -F'\t' '{ print $$1 FS $$5 }' | gzip > $@
+
+result/null/%-max-effect.gz:
+	[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	zcat result/poly/perm.*/*/*-$*.max-effect.gz | awk -F'\t' '{ print $$5 }' | gzip > $@
+
+result/stat/%-qval.gz: result/stat/%-max-effect.gz result/null/%-max-effect.gz
+	./run.sh ./make.pip.fdr.R $^ $@
 
 
 ################################################################
