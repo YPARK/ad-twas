@@ -6,7 +6,6 @@ source /broad/software/scripts/useuse > /dev/null
 reuse -q R-3.3
 reuse -q GCC-5.2
 reuse -q .icc-2015
-reuse -q Java-1.8
 
 export MKROOT=/broad/software/nonfree/Linux/redhat_6_x86_64/pkgs/intel/mkl
 

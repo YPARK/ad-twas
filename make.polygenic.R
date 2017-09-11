@@ -5,8 +5,8 @@ argv <- commandArgs(trailingOnly = TRUE)
 
 if(length(argv) < 3) q()
 
-y.file <- argv[1] # e.g., y.file = 'result/qtl/1/b1-hs-fqtl.resid.gz'
-data.hdr <- argv[2] # e.g.,  data.hdr = '/broad/hptmp/ypp/AD/twas/qtl/1/data-1'
+y.file <- argv[1] # e.g., y.file = 'result/qtl/3/b12-hs-lm.resid.gz'
+data.hdr <- argv[2] # e.g.,  data.hdr = '/broad/hptmp/ypp/AD/twas/qtl//3/data-12'
 out.hdr <- argv[3] # e.g., out.hdr <- 'temp'
 
 do.perm <- FALSE
@@ -22,8 +22,8 @@ lodds.cutoff <- -2
 library(dplyr)
 library(feather)
 library(fqtl)
-library(methods)
 library(Matrix)
+library(methods)
 source('util.R')
 
 .read.ft.tab <- function(...) read_feather(...) %>% as.data.frame()
@@ -50,7 +50,7 @@ if(do.perm) {
 }
 
 Y <- read.table(y.file) %>% scale() %>% as.matrix()
-valid.genes <- apply(!is.na(Y), 2, mean) > .8
+valid.genes <- which(apply(!is.na(Y), 2, mean) > .8)
 
 if(length(valid.genes) < 1) {
     log.msg('No valid genes\n\n')

@@ -106,6 +106,8 @@ jobs/qtl-run-jobs-long.txt.gz:
 ################################################################
 step5: jobs/poly-jobs.txt.gz
 
+step5-resubmit: jobs/poly-jobs-resubmit.txt.gz
+
 RSEED := 1991 1331 1771
 
 step5_jobs := $(foreach chr, $(CHR), $(shell ls -1 result/qtl/$(chr)/*.resid.gz | awk -F'/' '{ gsub(/.resid.gz/,"",$$NF); print "jobs/temp_poly-" $$(NF -1 ) "/" $$NF "-jobs.txt" }'))
@@ -114,6 +116,11 @@ jobs/poly-jobs.txt.gz: $(step5_jobs)
 	cat $^ | gzip > $@
 	[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.poly -binding "linear:1" -q short -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
 	rm -r jobs/temp_poly*
+
+jobs/poly-jobs-resubmit.txt.gz:
+	zcat jobs/poly-jobs.txt.gz | awk 'system("[ ! -f " $$NF ".effect.gz ] && [ ! -f " $$(NF-1) ".effect.gz ]") == 0' | gzip > $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.poly -binding "linear:1" -q short -l h_vmem=8g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+
 
 # % = $(chr)/$(resid) e.g., 21/b1-peer-sqtl
 jobs/temp_poly-%-jobs.txt: result/qtl/%.resid.gz
