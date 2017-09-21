@@ -115,12 +115,12 @@ step5: jobs/poly-jobs.txt.gz
 
 step5-resubmit: jobs/poly-jobs-resubmit.txt.gz
 
-RSEED := 1991 1331 1771
+RSEED := 1331 1771 1991
 
 step5_jobs := $(foreach chr, $(CHR), $(shell ls -1 result/qtl/$(chr)/*.resid.gz 2>/dev/null | awk -F'/' '{ gsub(/.resid.gz/,"",$$NF); print "jobs/temp_poly-" $$(NF -1 ) "/" $$NF "-jobs.txt" }'))
 
 jobs/poly-jobs.txt.gz: $(step5_jobs)
-	cat $^ | gzip > $@
+	(ls -1 jobs/temp_poly-*-jobs.txt | xargs cat) | gzip > $@
 	[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.poly -binding "linear:1" -q short -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
 	rm -r jobs/temp_poly*
 
@@ -131,9 +131,9 @@ jobs/poly-jobs-resubmit.txt.gz:
 
 # % = $(chr)/$(resid) e.g., 21/b1-peer-sqtl
 jobs/temp_poly-%-jobs.txt: result/qtl/%.resid.gz
-	@printf "" > $@
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 	@[ -d $(dir result/poly/$*) ] || mkdir -p $(dir result/poly/$*)
+	@printf "" > $@
 	@[ -f result/poly/$*.effect.gz ] || echo ./make.polygenic.R $< $(TEMPDIR)/$(shell echo $* | awk -F'/' '{ print $$1 }')/data-$(shell basename $* | awk -F'-' '{ gsub(/b/, "", $$1); print $$1 }') result/poly/$* >> $@
 	@for rseed in $(RSEED); do [ -d $(dir result/poly/perm.$${rseed}/$*) ] || mkdir -p $(dir result/poly/perm.$${rseed}/$*); done
 	@for rseed in $(RSEED); do [ -f result/poly/perm.$${rseed}/$*.effect.gz ] || echo ./make.polygenic.R $< $(TEMPDIR)/$(shell echo $* | awk -F'/' '{ print $$1 }')/data-$(shell basename $* | awk -F'-' '{ gsub(/b/, "", $$1); print $$1 }') result/poly/perm.$${rseed}/$* $${rseed} >> $@; done
@@ -141,7 +141,7 @@ jobs/temp_poly-%-jobs.txt: result/qtl/%.resid.gz
 
 ################################################################
 ## null distribution and final list of poygenic models
-QTL_DATA := hs-fqtl hs-sqtl peer-sqtl hs-lm peer-lm
+QTL_DATA := hs-fqtl peer-lm hs-lm
 
 step6: $(foreach qtl_data, $(QTL_DATA), result/stat/$(qtl_data)-max-effect.gz result/null/$(qtl_data)-max-effect.gz result/stat/$(qtl_data)-qval.gz)
 

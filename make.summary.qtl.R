@@ -90,8 +90,8 @@ estimate.confounder <- function(yy, yy.ctrl,
                    rate = 0.01,
                    decay = -0.01,
                    model = 'nb',
-                   pi = -2,
-                   tau = -4,
+                   pi = -0,
+                   tau = -5,
                    do.hyper = FALSE,
                    nsample = 10,
                    print.interv = 100,
@@ -191,15 +191,11 @@ filter.qtl <- function(qtl.tab, cis.dist = 1e6) {
 stdize.count <- function(xx) {
     x.min <- -4
     x.max <- 4
-    xx <- log2(1/2 + xx)
-    x.sd <- apply(xx, 2, sd, na.rm = TRUE)
-    x.med <- apply(xx, 2, median, na.rm = TRUE)
-    xx <- sweep(xx, 2, x.med, `-`)
-    xx <- sweep(xx, 2, x.sd, `/`)
+    xx <- log2(1/2 + xx) %>% scale()
     xx[xx > x.max] <- x.max
     xx[xx < x.min] <- x.min
     xx[is.na(xx)] <- x.min
-    xx <- 2^xx * 10
+    xx <- 2^(xx * 2)
 
     return(xx)
 }
