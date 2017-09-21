@@ -17,12 +17,17 @@ out.file <- argv[3]
 
 gtf.tab <- readGFF(gtf.file, tags = c('gene_id', 'gene_name', 'transcript_name', 'gene_type'))
 
-coding.genes <- gtf.tab %>% mutate(chr = seqid, ensg = gene_id) %>%
-    filter(gene_type == 'protein_coding', type == 'transcript') %>%
-        select(chr, start, end, strand, ensg, gene_name) %>%
-            arrange(chr, start)
+strip.ensg <- function(x) strsplit(x, split = '[.]')[[1]][1]
 
-data.genes <- read.table(data.gene.file, col.names = c('ensg', 'data.loc'))
+coding.genes <-
+    gtf.tab %>% mutate(chr = seqid, ensg = gene_id) %>%
+        filter(gene_type == 'protein_coding', type == 'transcript') %>%
+            select(chr, start, end, strand, ensg, gene_name) %>%
+                arrange(chr, start) %>%
+                    mutate(ensg = sapply(ensg, strip.ensg))
+
+data.genes <- read.table(data.gene.file, col.names = c('ensg', 'data.loc')) %>%
+    mutate(ensg = sapply(ensg, strip.ensg))
 
 out.tab <- coding.genes %>%
     left_join(data.genes, by = 'ensg') %>%

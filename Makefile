@@ -64,20 +64,25 @@ data/rnaseq/peer_factors.txt.gz: data/pheno.txt.gz data/rnaseq/size_factors.txt.
 ################################################################
 ## pre-generate temporary data
 TEMPDIR := /broad/hptmp/ypp/AD/twas/qtl/
-CHUNK := 33
-NCTRL := 3
+NCTRL := 5
 
-step3: $(TEMPDIR) data/rnaseq/size_factors.txt.gz jobs/qtl-data-jobs.txt.gz
+jobs/segments/%-jobs.txt: data/rnaseq/chr%-genes.txt.gz
+	[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	./run.sh ./make.job.segments.R $< > $@
+
+step3: $(TEMPDIR) \
+  $(foreach chr, $(CHR), jobs/segments/$(chr)-jobs.txt) \
+  data/rnaseq/size_factors.txt.gz jobs/qtl-data-jobs.txt.gz
 
 jobs/qtl-data-jobs.txt.gz: $(foreach chr, $(CHR), jobs/temp-qtl-data-$(chr)-jobs.txt.gz)
 	zcat $^ | awk 'system("[ ! -f " $$NF ".x.ft ]") == 0' | gzip > $@
 	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N qtl.data -binding "linear:1" -q short -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
 	rm $^
 
-jobs/temp-qtl-data-%-jobs.txt.gz: data/rnaseq/chr%-genes.txt.gz data/rnaseq/chr%-count.txt.gz
+jobs/temp-qtl-data-%-jobs.txt.gz: jobs/segments/%-jobs.txt
 	[ -d $(dir $@) ] || mkdir -p $(dir $@)
 	mkdir -p $(TEMPDIR)/$*/
-	./make_job_segments.awk -vNTOT=$$(zcat $< | wc -l) -vCHUNK=$(CHUNK) | awk '{ print "./make.data.qtl.R" FS "$^" FS $$1 FS $(NCTRL) FS ("$(PLINK_HDR)" $*) FS ("$(TEMPDIR)/$*/data-" NR) }' | gzip > $@
+	cat jobs/segments/$*-jobs.txt | awk '{ print "./make.data.qtl.R" FS "data/rnaseq/chr$*-genes.txt.gz" FS "data/rnaseq/chr$*-count.txt.gz" FS $$1 FS $(NCTRL) FS ("$(PLINK_HDR)" $*) FS ("$(TEMPDIR)/$*/data-" NR) }' | gzip > $@
 
 $(TEMPDIR):
 	[ -d $@ ] || mkdir -p $@
@@ -88,13 +93,13 @@ $(TEMPDIR):
 step4: $(TEMPDIR) jobs/qtl-run-jobs.txt.gz
 
 jobs/qtl-run-jobs.txt.gz: $(foreach chr, $(CHR), jobs/temp-qtl-run-$(chr)-jobs.txt.gz)
-	zcat $^ | awk 'system("[ ! -f " $$NF ".x.ft ]") == 0' | gzip > $@
+	zcat $^ | awk 'system("[ ! -f " $$NF ".genes.gz ]") == 0' | gzip > $@
 	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.qtl -binding "linear:1" -q short -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
 	rm $^
 
-jobs/temp-qtl-run-%-jobs.txt.gz: data/rnaseq/chr%-genes.txt.gz
+jobs/temp-qtl-run-%-jobs.txt.gz: jobs/segments/%-jobs.txt
 	[ -d $(dir $@) ] || mkdir -p $(dir $@)
-	./make_job_segments.awk -vNTOT=$$(zcat $< | wc -l) -vCHUNK=$(CHUNK) | awk '{ print "./make.summary.qtl.R" FS ("$(TEMPDIR)/$*/data-" NR) FS ("result/qtl/$*/b" NR) }' | gzip > $@
+	cat jobs/segments/$*-jobs.txt | awk '{ print "./make.summary.qtl.R" FS ("$(TEMPDIR)/$*/data-" NR) FS ("result/qtl/$*/b" NR) }' | gzip > $@
 
 step4-long: jobs/qtl-run-jobs-long.txt.gz
 
@@ -112,7 +117,7 @@ step5-resubmit: jobs/poly-jobs-resubmit.txt.gz
 
 RSEED := 1991 1331 1771
 
-step5_jobs := $(foreach chr, $(CHR), $(shell ls -1 result/qtl/$(chr)/*.resid.gz | awk -F'/' '{ gsub(/.resid.gz/,"",$$NF); print "jobs/temp_poly-" $$(NF -1 ) "/" $$NF "-jobs.txt" }'))
+step5_jobs := $(foreach chr, $(CHR), $(shell ls -1 result/qtl/$(chr)/*.resid.gz 2>/dev/null | awk -F'/' '{ gsub(/.resid.gz/,"",$$NF); print "jobs/temp_poly-" $$(NF -1 ) "/" $$NF "-jobs.txt" }'))
 
 jobs/poly-jobs.txt.gz: $(step5_jobs)
 	cat $^ | gzip > $@

@@ -83,8 +83,9 @@ take.y0 <- function(.chr, y1, n.top) {
 
     y0 <- read.table(.expr.file, sep = '\t') %>% as.matrix()
     y0 <- sweep(y0, 1, size.factor, `/`)
-    rm.y0 <- which(apply(y0, 2, sum) == 0)
-    y0 <- y0[, -rm.y0]
+
+    valid.y0 <- which(apply(y0 == 0, 2, sum) == 0)
+    y0 <- y0 %c% valid.y0
 
     log.msg('correlation between y1 and y0 in chr%d\n', .chr)
 

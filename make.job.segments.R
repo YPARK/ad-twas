@@ -7,7 +7,7 @@ options(stringsAsFactors = FALSE)
 library(dplyr)
 
 block.size0 <- 1e6
-max.size <- 33
+max.size <- 20
 
 gene.cols <- c('chr', 'tss', 'tes', 'strand', 'ensg', 'hgnc', 'remove')
 

@@ -65,30 +65,3 @@ write.tab <- function(x, ...) {
 write.mat <- function(x, digits = 4, ...) {
     write.tab(round(x, digits), ...)
 }
-
-take.theta <- function(qtl.out) {
-    if('mean.left' %in% names(qtl.out)){
-        theta <- qtl.out$mean.left$theta %*% t(qtl.out$mean.right$theta)
-    } else {
-        theta <- qtl.out$mean$theta
-    }
-    return(theta)
-}
-
-take.pve <- function(qtl.out, xx, cc) {
-
-    theta <- take.theta(qtl.out)
-    theta.cov <- qtl.out$mean.cov$theta
-    resid <- qtl.out$resid$theta
-
-    xx[is.na(xx)] <- 0
-    theta[is.na(theta)] <- 0
-    theta.cov[is.na(theta.cov)] <- 0
-    cc[is.na(cc)] <- 0
-    eta.1 <- xx %*% theta
-    eta.2 <- cc %*% theta.cov
-
-    data.frame(v1 = apply(eta.1, 2, var, na.rm = TRUE),
-               v2 = apply(eta.2, 2, var, na.rm = TRUE),
-               vr = apply(resid, 2, var, na.rm = TRUE))
-}
