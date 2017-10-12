@@ -14,6 +14,14 @@ log.msg <- function(...) {
     matrix(NA, nrow, ncol)
 }
 
+.ones <- function(nrow, ncol) {
+    matrix(1, nrow, ncol)
+}
+
+.zeros <- function(nrow, ncol) {
+    matrix(0, nrow, ncol)
+}
+
 .rnorm <- function(nrow, ncol) {
     matrix(rnorm(nrow * ncol), nrow, ncol)
 }
