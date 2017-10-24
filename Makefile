@@ -158,6 +158,48 @@ result/stat/%-qval.gz: result/stat/%-max-effect.gz result/null/%-max-effect.gz
 
 
 ################################################################
+## Hi-C guided QTL generation
+
+TEMPDIR-HIC := /broad/hptmp/ypp/AD/twas/hic-qtl/
+
+step7: $(TEMPDIR-HIC) jobs/hic-qtl-data-jobs.txt.gz
+
+jobs/hic-qtl-data-jobs.txt.gz: $(foreach chr, $(CHR), jobs/temp-hic-qtl-data-$(chr)-jobs.txt.gz)
+	zcat $^ | awk 'system("[ ! -f " $$NF ".x.ft ]") == 0' | gzip > $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N hic-qtl.data -binding "linear:1" -l h_rt=1800 -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+	rm $^
+
+jobs/temp-hic-qtl-data-%-jobs.txt.gz: jobs/segments/%-jobs.txt
+	[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	mkdir -p $(TEMPDIR-HIC)/$*/
+	cat jobs/segments/$*-jobs.txt | awk '{ print "./make.data.qtl.R" FS "data/rnaseq/chr$*-genes.txt.gz" FS "data/rnaseq/chr$*-count.txt.gz" FS $$1 FS $(NCTRL) FS ("$(PLINK_HDR)" $*) FS 3e6 FS ("$(TEMPDIR-HIC)/$*/data-" NR) }' | gzip > $@
+
+$(TEMPDIR-HIC):
+	[ -d $@ ] || mkdir -p $@
+
+
+## confounder correction and marginal QTL
+step8: $(TEMPDIR) jobs/hic-qtl-run-jobs.txt.gz
+
+jobs/hic-qtl-run-jobs.txt.gz: $(foreach chr, $(CHR), jobs/temp-hic-qtl-run-$(chr)-jobs.txt.gz)
+	zcat $^ | awk 'system("[ ! -f " $$NF ".genes.gz ]") == 0' | gzip > $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.hic-qtl -binding "linear:1" -l h_rt=1:00:00 -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+	rm $^
+
+jobs/temp-hic-qtl-run-%-jobs.txt.gz: jobs/segments/%-jobs.txt
+	[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	printf "" | gzip >> $@
+	cat jobs/segments/$*-jobs.txt | awk '{ print "./make.summary.hic-qtl.R" FS ("$(TEMPDIR-HIC)/$*/data-" NR) FS "hic/CO/chr$*.pairs.gz" FS ("result/hic-qtl/CO/$*/b" NR) }' | gzip >> $@
+	cat jobs/segments/$*-jobs.txt | awk '{ print "./make.summary.hic-qtl.R" FS ("$(TEMPDIR-HIC)/$*/data-" NR) FS "hic/HC/chr$*.pairs.gz" FS ("result/hic-qtl/HC/$*/b" NR) }' | gzip >> $@
+
+step8-long: jobs/hic-qtl-run-jobs-long.txt.gz
+
+jobs/hic-qtl-run-jobs-long.txt.gz:
+	zcat jobs/hic-qtl-run-jobs.txt.gz | awk 'system("[ ! -f " $$NF ".genes.gz ]") == 0' | gzip > $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.hic-qtl -binding "linear:1" -l h_rt=12:00:00 -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+
+
+################################################################
 ## Utilities
 PLINKZIP := https://www.cog-genomics.org/static/bin/plink170815/plink_linux_x86_64.zip
 
