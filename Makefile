@@ -76,7 +76,7 @@ step3: $(TEMPDIR) \
 
 jobs/qtl-data-jobs.txt.gz: $(foreach chr, $(CHR), jobs/temp-qtl-data-$(chr)-jobs.txt.gz)
 	zcat $^ | awk 'system("[ ! -f " $$NF ".x.ft ]") == 0' | gzip > $@
-	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N qtl.data -binding "linear:1" -q short -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N qtl.data -binding "linear:1" -l h_rt=1800 -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
 	rm $^
 
 jobs/temp-qtl-data-%-jobs.txt.gz: jobs/segments/%-jobs.txt
@@ -94,7 +94,7 @@ step4: $(TEMPDIR) jobs/qtl-run-jobs.txt.gz
 
 jobs/qtl-run-jobs.txt.gz: $(foreach chr, $(CHR), jobs/temp-qtl-run-$(chr)-jobs.txt.gz)
 	zcat $^ | awk 'system("[ ! -f " $$NF ".genes.gz ]") == 0' | gzip > $@
-	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.qtl -binding "linear:1" -q short -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.qtl -binding "linear:1" -l h_rt=1800 -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
 	rm $^
 
 jobs/temp-qtl-run-%-jobs.txt.gz: jobs/segments/%-jobs.txt
@@ -105,7 +105,7 @@ step4-long: jobs/qtl-run-jobs-long.txt.gz
 
 jobs/qtl-run-jobs-long.txt.gz:
 	zcat jobs/qtl-run-jobs.txt.gz | awk 'system("[ ! -f " $$NF ".genes.gz ]") == 0' | gzip > $@
-	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.qtl -binding "linear:1" -q long -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.qtl -binding "linear:1" -l h_rt=18000 -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
 
 
 
@@ -181,9 +181,11 @@ $(TEMPDIR-HIC):
 ## confounder correction and marginal QTL
 step8: $(TEMPDIR) jobs/hic-qtl-run-jobs.txt.gz
 
+step8-long: jobs/hic-qtl-run-jobs-long.txt.gz
+
 jobs/hic-qtl-run-jobs.txt.gz: $(foreach chr, $(CHR), jobs/temp-hic-qtl-run-$(chr)-jobs.txt.gz)
 	zcat $^ | awk 'system("[ ! -f " $$NF ".genes.gz ]") == 0' | gzip > $@
-	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.hic-qtl -binding "linear:1" -l h_rt=1:00:00 -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.hic-qtl -binding "linear:1" -l h_rt=1:00:00 -l h_vmem=16g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
 	rm $^
 
 jobs/temp-hic-qtl-run-%-jobs.txt.gz: jobs/segments/%-jobs.txt
@@ -196,7 +198,14 @@ step8-long: jobs/hic-qtl-run-jobs-long.txt.gz
 
 jobs/hic-qtl-run-jobs-long.txt.gz:
 	zcat jobs/hic-qtl-run-jobs.txt.gz | awk 'system("[ ! -f " $$NF ".genes.gz ]") == 0' | gzip > $@
-	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.hic-qtl -binding "linear:1" -l h_rt=12:00:00 -l h_vmem=4g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N TWAS.hic-qtl -binding "linear:1" -l h_rt=12:00:00 -l h_vmem=16g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+
+
+## recall data generation for those missing spots
+jobs/hic-qtl-data-recall.txt.gz:
+	zcat jobs/hic-qtl-data-jobs.txt.gz | awk '{ split($$3,yy,"/"); yyfile = yy[length(yy)]; gsub("-count.txt.gz","",yyfile); gsub("chr","",yyfile); chr=yyfile; split($$NF, out, "/"); data = out[length(out)]; gsub("data-", "", data); gene_file = "result/hic-qtl/CO/" chr "/b" data ".genes.gz"; if(system("[ ! -f " gene_file " ]") == 0) print }' | gzip > $@
+	@[ $$(zcat $@ | wc -l) -lt 1 ] || qsub -t 1-$$(zcat $@ | wc -l) -N hic-qtl.data -binding "linear:1" -l h_rt=1800 -l h_vmem=16g -P compbio_lab -V -cwd -o /dev/null -b y -j y ./run_rscript.sh $@
+
 
 
 ################################################################

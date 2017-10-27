@@ -4,8 +4,8 @@ argv <- commandArgs(trailingOnly = TRUE)
 
 if(length(argv) < 3) q()
 
-data.hdr <- argv[1] # e.g., data.hdr = '/broad/hptmp/ypp/AD/twas/qtl/1/data-11'
-hic.file <- argv[2] # e.g., hic.file = 'hic/CO/chr2.pairs.gz'
+data.hdr <- argv[1] # e.g., data.hdr = '/broad/hptmp/ypp/AD/twas/hic-qtl/1/data-11'
+hic.file <- argv[2] # e.g., hic.file = 'hic/CO/chr1.pairs.gz'
 out.hdr <- argv[3]  # e.g., out.hdr = 'temp2'
 
 dir.create(dirname(out.hdr), recursive = TRUE, showWarnings = FALSE)
@@ -117,8 +117,14 @@ take.pve <- function(qtl.out, xx) {
     theta[is.na(theta)] <- 0
 
     eta.1 <- xx %*% theta
-    data.frame(v1 = apply(eta.1, 2, var, na.rm = TRUE),
-               vr = apply(resid, 2, var, na.rm = TRUE))
+
+    v1 <- apply(eta.1, 2, var, na.rm = TRUE) %>% as.vector()
+    vr <- apply(resid, 2, var, na.rm = TRUE) %>% as.vector()
+
+    print(v1)
+    print(vr)
+
+    return(data.frame(v1, vr))
 }
 
 run.glmnet <- function(y, x, alpha = 1){
@@ -127,11 +133,12 @@ run.glmnet <- function(y, x, alpha = 1){
     yy <- as.matrix(y[valid])
     cv.out <- cv.glmnet(x=xx, y=yy, alpha=alpha, nfolds=5)
     bet <- glmnet(x=xx, y=yy, alpha=alpha, lambda=cv.out$lambda.min)$beta
+    bet <- matrix(bet)
 
     cat(mean(abs(bet) > 0), '\n')
 
     if(sum(abs(bet) > 0) == 0) {
-        return(list(beta = NULL, resid = y))
+        return(list(beta = bet, resid = y))
     }
 
     ## re-estimate lm on non-zero coefficients
@@ -154,10 +161,13 @@ estimate.lm <- function(yy, yy.ctrl,
     glmnet.list <- apply(yy, 2, run.glmnet, x = .xx, alpha = 0.5)
 
     out <- list()
-    out$resid$theta <- do.call(cbind, lapply(glmnet.list, function(x) x$resid))
-    out$mean$theta <- do.call(cbind, lapply(glmnet.list, function(x) x$beta))
+    resid <- do.call(cbind, lapply(glmnet.list, function(x) x$resid)) %>% as.matrix()
+    out$resid$theta <- resid
+    beta <- do.call(cbind, lapply(glmnet.list, function(x) x$beta)) %>% as.matrix()
+    out$mean$theta <- beta
 
-    pve <- cbind(.gene.names, take.pve(out, as.matrix(yy.ctrl)))
+    pve <- cbind(.gene.names, take.pve(out, .xx))
+
     colnames(out$resid$theta) <- .gene.names
 
     return(list(R = out$resid$theta, PVE = pve, out.tag = out.tag, lm = glmnet.list))
@@ -208,7 +218,12 @@ valid.y1 <- which(apply(Y1 == 0, 2, mean) < .5)
 Y1 <- Y1 %c% valid.y1
 genes <- genes %r% valid.y1
 
-if(ncol(Y1) == 0) q()
+if(ncol(Y1) == 0) {
+    log.msg('No valid gene\n\n')
+    system('printf "" | gzip > ' %&&% (out.hdr %&&% '.genes.gz'))
+    q()
+}
+
 if(ncol(Y0) == 0) Y0 <- matrix(0, nrow = nrow(Y1), ncol = 1)
 
 ################################################################
@@ -234,19 +249,17 @@ colnames(Y1.std) <- gene.names <- genes$ensg
 peer <- .read.mat(peer.data.file) %>% scale()
 
 ################################################################
-conf.1 <- estimate.lm(Y1.std, Y0.std, out.tag = 'hs-lm')
-conf.2 <- estimate.lm(Y1.std, peer, out.tag = 'peer-lm')
+
+conf.1 <- estimate.lm(Y1.std, Y0.std, out.tag = 'hs-lm', gene.names)
+
+conf.2 <- estimate.lm(Y1.std, peer, out.tag = 'peer-lm', gene.names)
 
 conf.list <- list(conf.1, conf.2)
 
 sapply(conf.list, function(cc) write.confounder(cc, out.hdr %&&% '-' %&&% cc$out.tag))
 
-
 qtl.y1 <- get.marginal.qtl(X, Y1.std) %>% hic.filter.qtl()
 write.tab.gz(qtl.y1, out.hdr %&&% '.qtl-raw-y1.gz')
-
-qtl.y0 <- get.marginal.qtl(X, Y0.std)
-write.tab.gz(qtl.y0, out.hdr %&&% '.qtl-raw-y0.gz')
 
 sapply(conf.list, function(cc) {
     write.tab.gz(get.marginal.qtl(X, cc$R) %>% hic.filter.qtl(),

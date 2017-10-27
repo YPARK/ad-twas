@@ -108,21 +108,33 @@ take.pve <- function(qtl.out, xx, cc) {
     eta.1 <- xx %*% theta
     eta.2 <- cc %*% theta.cov
 
-    data.frame(v1 = apply(eta.1, 2, var, na.rm = TRUE),
-               v2 = apply(eta.2, 2, var, na.rm = TRUE),
-               vr = apply(resid, 2, var, na.rm = TRUE))
+    data.frame(v1 = apply(eta.1, 2, var, na.rm = TRUE) %>% as.vector(),
+               v2 = apply(eta.2, 2, var, na.rm = TRUE) %>% as.vector(),
+               vr = apply(resid, 2, var, na.rm = TRUE) %>% as.vector())
 }
 
 run.glmnet <- function(y, x, alpha = 1){
     valid <- !is.na(y)
     xx <- x[valid,,drop=FALSE]
     yy <- as.matrix(y[valid])
+
     cv.out <- cv.glmnet(x=xx, y=yy, alpha=alpha, nfolds=5)
     bet <- glmnet(x=xx, y=yy, alpha=alpha, lambda=cv.out$lambda.min)$beta
+    bet <- matrix(bet)
+
     cat(mean(abs(bet) > 0), '\n')
 
+    if(sum(abs(bet) > 0) == 0) {
+        return(list(beta = bet, resid = y))
+    }
+
+    ## re-estimate lm on non-zero coefficients
     resid <- matrix(NA, nrow = length(y), ncol = 1)
-    resid[valid,] <- as.matrix(yy - xx %*% bet)
+    xx.sub <- xx %c% which(abs(bet)>0)
+    lm.out <- lm(yy ~ xx.sub - 1)
+
+    resid[valid,] <- as.matrix(lm.out$residuals)
+
     return(list(beta = bet, resid = resid))
 }
 
@@ -139,9 +151,9 @@ estimate.lm <- function(yy, yy.ctrl,
     glmnet.list <- apply(yy, 2, run.glmnet, x = .xx, alpha = 0.5)
 
     out <- list()
-    out$resid$theta <- do.call(cbind, lapply(glmnet.list, function(x) x$resid))
-    out$mean$theta <- do.call(cbind, lapply(glmnet.list, function(x) x$beta %r% 1:.nc))
-    out$mean.cov$theta <- do.call(cbind, lapply(glmnet.list, function(x) x$beta %r% (-(1:.nc))))
+    out$resid$theta <- do.call(cbind, lapply(glmnet.list, function(x) x$resid)) %>% as.matrix()
+    out$mean$theta <- do.call(cbind, lapply(glmnet.list, function(x) x$beta %r% 1:.nc)) %>% as.matrix()
+    out$mean.cov$theta <- do.call(cbind, lapply(glmnet.list, function(x) x$beta %r% (-(1:.nc)))) %>% as.matrix()
 
     pve <- cbind(.gene.names, take.pve(out, as.matrix(yy.ctrl), as.matrix(.pheno)))
     colnames(out$resid$theta) <- .gene.names
@@ -178,7 +190,11 @@ valid.y1 <- which(apply(Y1 == 0, 2, mean) < .5)
 Y1 <- Y1 %c% valid.y1
 genes <- genes %r% valid.y1
 
-if(ncol(Y1) == 0) q()
+if(ncol(Y1) == 0) {
+    log.msg('No valid gene\n\n')
+    system('printf "" | gzip > ' %&&% (out.hdr %&&% '.genes.gz'))
+    q()
+}
 if(ncol(Y0) == 0) Y0 <- matrix(0, nrow = nrow(Y1), ncol = 1)
 
 ################################################################
@@ -204,8 +220,8 @@ pheno <- .read.tab(cov.data.file) %>%
                 as.matrix()
 
 ################################################################
-conf.1 <- estimate.lm(Y1.std, Y0.std, out.tag = 'hs-lm')
-conf.2 <- estimate.lm(Y1.std, peer, out.tag = 'peer-lm')
+conf.1 <- estimate.lm(Y1.std, Y0.std, out.tag = 'hs-lm', pheno, gene.names)
+conf.2 <- estimate.lm(Y1.std, peer, out.tag = 'peer-lm', pheno, gene.names)
 
 conf.list <- list(conf.1, conf.2)
 
@@ -214,9 +230,6 @@ sapply(conf.list, function(cc) write.confounder(cc, out.hdr %&&% '-' %&&% cc$out
 
 qtl.y1 <- get.marginal.qtl(X, Y1.std) %>% filter.qtl()
 write.tab.gz(qtl.y1, out.hdr %&&% '.qtl-raw-y1.gz')
-
-qtl.y0 <- get.marginal.qtl(X, Y0.std)
-write.tab.gz(qtl.y0, out.hdr %&&% '.qtl-raw-y0.gz')
 
 sapply(conf.list, function(cc) {
     write.tab.gz(get.marginal.qtl(X, cc$R) %>% filter.qtl(),
